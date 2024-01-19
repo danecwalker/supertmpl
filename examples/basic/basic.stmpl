@@ -1,2 +1,57 @@
-package basic
+package app
 
+import (
+	"log/slog"
+	"os"
+
+	"github.com/Big-Buddies/bbv3_1/event"
+	"github.com/Big-Buddies/bbv3_1/repo/inmem"
+	"github.com/Big-Buddies/bbv3_1/router"
+	"github.com/Big-Buddies/bbv3_1/service/analytics"
+	"github.com/Big-Buddies/bbv3_1/service/auth"
+	"github.com/Big-Buddies/bbv3_1/service/log"
+	"github.com/Big-Buddies/bbv3_1/service/product"
+)
+
+type App struct {
+	Router *router.Router
+	Logger *slog.Logger
+	Broker event.Broker
+
+	AnalyticsService analytics.AnalyticsService
+	AuthService      auth.AuthService
+	LogService       log.LogService
+	ProductService   product.ProductService
+
+	AuthRepository      auth.AuthRepository
+	ProductRepository   product.ProductRepository
+	AnalyticsRepository analytics.AnalyticsRepository
+}
+
+func Start() {
+	repo := inmem.NewInMemDB()
+	// dynamorepo := dynamo.NewDynamoDB("us-east-1", "http://localhost:8000", "test")
+	app := App{
+		Router:              router.NewRouter(),
+		Logger:              slog.New(slog.NewJSONHandler(os.Stdout, nil)),
+		Broker:              event.NewMemBroker(),
+		ProductRepository:   repo,
+		AnalyticsRepository: repo,
+		AuthRepository:      nil,
+	}
+
+	app.Logger.Info("starting the broker")
+	go app.Broker.Run()
+
+	app.Logger.Info("registering services")
+	app.AnalyticsService = analytics.NewAnalyticsService(app.Broker, app.AnalyticsRepository)
+	app.AuthService = auth.NewAuthService(app.Broker, app.AuthRepository)
+	app.LogService = log.NewSlogService(app.Broker)
+	app.ProductService = product.NewProductService(app.Broker, app.ProductRepository)
+
+	app.Logger.Info("registering routes")
+	app.RegisterRoutes()
+
+	app.Logger.Info("starting the server")
+	app.Router.Listen(":3000")
+}

@@ -65,6 +65,11 @@ const (
 	Var
 )
 
+func IsKeyword(keyword string) (kwToken, bool) {
+	t, ok := keywords[keyword]
+	return t, ok
+}
+
 var keywords = map[string]kwToken{
 	"break":       Break,
 	"case":        Case,
